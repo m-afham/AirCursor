@@ -8,13 +8,13 @@ struct AirCursorApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView()
+            StatusMenuView()
                 .environmentObject(controller)
                 .environmentObject(controller.pairing)
         } label: {
             MenuBarLabel(controller: controller)
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
 
         Window("AirCursor Controls", id: WindowID.controls) {
             MenuContentView(isControlWindow: true)
@@ -56,8 +56,8 @@ private struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Label(controller.controlStatus.label, systemImage: controller.menuBarSymbol)
-            .labelStyle(.titleAndIcon)
+        Image(systemName: controller.menuBarSymbol)
+            .accessibilityLabel("AirCursor: \(controller.statusText)")
             .help("AirCursor: \(controller.statusText). \(HotKey.controls.display) opens controls.")
             .onAppear {
                 controller.windowOpener = { id in openWindow(id: id) }
