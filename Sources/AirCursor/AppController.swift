@@ -39,6 +39,9 @@ final class AppController: ObservableObject {
     @Published private(set) var mode: TrackingMode = .pointer
     @Published private(set) var isDragging = false
     @Published private(set) var motionStreaming = false
+    @Published private(set) var headphoneConnected: Bool?
+    @Published private(set) var recoveryInProgress = false
+    @Published private(set) var trackingChangeReason = ""
     @Published private(set) var accessibilityTrusted = EventSynthesizer.isTrusted
     @Published private(set) var motionAuthorization: CMAuthorizationStatus = HeadphoneMotionService.authorizationStatus
     @Published private(set) var live = LiveReadout()
@@ -99,6 +102,7 @@ final class AppController: ObservableObject {
     private var lastMotionRestart: TimeInterval = 0
     private var lastMotionError: String?
     private var started = false
+    private var lastLoggedControlStatus: ControlStatus?
 
     private static var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
@@ -190,9 +194,9 @@ final class AppController: ObservableObject {
 
     // MARK: User intents
 
-    func toggleTracking() { setTracking(!trackingEnabled) }
+    func toggleTracking(source: String = "Controls") { setTracking(!trackingEnabled, source: source) }
 
-    func setTracking(_ on: Bool, announce: Bool = true) {
+    func setTracking(_ on: Bool, announce: Bool = true, source: String = "Controls") {
         if on {
             accessibilityTrusted = EventSynthesizer.isTrusted
             guard accessibilityTrusted else {
@@ -206,6 +210,7 @@ final class AppController: ObservableObject {
         guard on != trackingEnabled else { updateServices(); return }
 
         trackingEnabled = on
+        trackingChangeReason = source
         Diagnostics.log.notice("Tracking \(on ? "on" : "off", privacy: .public)")
         if on { routeAudioToHeadphonesIfNeeded() }
         differentiator.reset()
@@ -222,6 +227,37 @@ final class AppController: ObservableObject {
             toast(on ? "Head tracking on" : "Head tracking paused",
                   symbol: on ? "cursorarrow.motionlines" : "pause.circle.fill")
         }
+    }
+
+    /// Retry the existing motion/audio pipeline without resetting user settings.
+    func reconnectTracking() {
+        guard !recoveryInProgress else { return }
+        refreshPermissions()
+        guard accessibilityTrusted else { requestAccessibility(); return }
+        guard motionAuthorization == .authorized else { requestMotionAccess(); return }
+        recoveryInProgress = true
+        setTracking(true)
+        releaseButtons()
+        differentiator.reset()
+        smoother.reset()
+        dwell.reset()
+        cursorOverlay.hide()
+        motionStreaming = false
+        refreshDevices()
+        routeAudioToHeadphonesIfNeeded()
+        motionStartedAt = Self.now
+        lastMotionRestart = Self.now
+        Diagnostics.log.notice("Tracking recovery requested from controls")
+        motion.restart()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            self?.recoveryInProgress = false
+        }
+    }
+
+    func showControls() {
+        windowOpener?(WindowID.controls)
+        NSApp.activate()
     }
 
     func setMode(_ newMode: TrackingMode) {
@@ -468,6 +504,11 @@ final class AppController: ObservableObject {
     }
 
     private func publishDiagnostics() {
+        let currentStatus = controlStatus
+        if currentStatus != lastLoggedControlStatus {
+            lastLoggedControlStatus = currentStatus
+            Diagnostics.log.notice("Control status: \(currentStatus.title, privacy: .public); mode: \(self.mode.title, privacy: .public); last control change: \(self.trackingChangeReason, privacy: .public)")
+        }
         let headphoneAudio = AudioRouter.headphoneOutput(preferredName: connectedHeadphones?.name)
         let handoff = connectedHeadphones != nil && headphoneAudio == nil && !motionStreaming
         if handoff != needsAudioHandoff {
@@ -530,7 +571,7 @@ final class AppController: ObservableObject {
     /// Dock and ⌘-Tab so the window can't get lost behind other apps.
     func windowVisibilityChanged() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            let titles: Set<String> = ["AirCursor", "Welcome to AirCursor"]
+            let titles: Set<String> = ["AirCursor", "Welcome to AirCursor", "AirCursor Controls"]
             let anyOpen = NSApp.windows.contains { $0.isVisible && titles.contains($0.title) }
             let policy: NSApplication.ActivationPolicy = anyOpen ? .regular : .accessory
             if NSApp.activationPolicy() != policy {
@@ -541,6 +582,7 @@ final class AppController: ObservableObject {
     }
 
     private func headphonesChanged(connected: Bool) {
+        headphoneConnected = connected
         refreshDevices()
         if connected {
             if trackingEnabled { routeAudioToHeadphonesIfNeeded() }
@@ -732,7 +774,11 @@ final class AppController: ObservableObject {
         }
 
         lastTriggerDescription = "\(trigger.displayName) → \(action.displayName)"
-        perform(action, at: point)
+        if action == .toggleTracking {
+            toggleTracking(source: trigger.displayName)
+        } else {
+            perform(action, at: point)
+        }
         lastTriggerEvent = TriggerEvent(trigger: trigger, action: action)
     }
 
@@ -811,8 +857,11 @@ final class AppController: ObservableObject {
 
     private func registerHotKeys() {
         let mods = HotKey.modifiers
+        hotKeys.register(id: HotKey.controls.id, keyCode: HotKey.controls.keyCode, modifiers: mods) { [weak self] in
+            self?.showControls()
+        }
         hotKeys.register(id: HotKey.toggleTracking.id, keyCode: HotKey.toggleTracking.keyCode, modifiers: mods) { [weak self] in
-            self?.toggleTracking()
+            self?.toggleTracking(source: "Keyboard shortcut")
         }
         hotKeys.register(id: HotKey.scrollMode.id, keyCode: HotKey.scrollMode.keyCode, modifiers: mods) { [weak self] in
             guard let self, self.trackingEnabled else { return }
@@ -829,21 +878,16 @@ final class AppController: ObservableObject {
 
     // MARK: Menu bar
 
-    var menuBarSymbol: String {
-        if !trackingEnabled { return "cursorarrow" }
-        if !motionStreaming { return "airpodspro" }
-        return mode == .scroll ? "arrow.up.and.down.circle" : "cursorarrow.motionlines"
+    var controlStatus: ControlStatus {
+        .resolve(accessibility: accessibilityTrusted, motion: motionAuthorization,
+                 tracking: trackingEnabled, streaming: motionStreaming,
+                 reconnecting: recoveryInProgress, handoff: needsAudioHandoff,
+                 connected: headphoneConnected, mode: mode, dragging: isDragging)
     }
 
-    var statusText: String {
-        if !accessibilityTrusted { return "Needs Accessibility permission" }
-        if motionAuthorization == .denied { return "Motion access denied" }
-        if !trackingEnabled { return "Paused" }
-        if needsAudioHandoff { return "Choose AirPods as Mac sound output" }
-        if !motionStreaming { return "Waiting for AirPods…" }
-        if isDragging { return "Dragging" }
-        return mode == .scroll ? "Scrolling" : "Tracking your head"
-    }
+    var menuBarSymbol: String { controlStatus.symbol }
+    var statusText: String { controlStatus.title }
+
 }
 
 // MARK: - Keyboard shortcuts for system actions
