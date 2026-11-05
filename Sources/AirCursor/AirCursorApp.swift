@@ -16,6 +16,16 @@ struct AirCursorApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("AirCursor Controls", id: WindowID.controls) {
+            MenuContentView(isControlWindow: true)
+                .environmentObject(controller)
+                .environmentObject(controller.pairing)
+                .onAppear { controller.windowVisibilityChanged() }
+                .onDisappear { controller.windowVisibilityChanged() }
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+
         Window("AirCursor", id: WindowID.main) {
             MainWindowView()
                 .environmentObject(controller)
@@ -46,7 +56,9 @@ private struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Image(systemName: controller.menuBarSymbol)
+        Label(controller.controlStatus.label, systemImage: controller.menuBarSymbol)
+            .labelStyle(.titleAndIcon)
+            .help("AirCursor: \(controller.statusText). \(HotKey.controls.display) opens controls.")
             .onAppear {
                 controller.windowOpener = { id in openWindow(id: id) }
             }
@@ -54,6 +66,7 @@ private struct MenuBarLabel: View {
 }
 
 enum WindowID {
+    static let controls = "controls"
     static let main = "main"
     static let tour = "tour"
 }
@@ -69,6 +82,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated { AppController.shared.shutdown() }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainActor.assumeIsolated { AppController.shared.showControls() }
+        return true
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

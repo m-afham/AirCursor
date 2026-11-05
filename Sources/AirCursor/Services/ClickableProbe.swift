@@ -135,7 +135,7 @@ enum ClickableProbe {
 
     /// Preserve the tour/Settings fallback without querying our own AX tree.
     @MainActor private static func isInteractive(_ window: NSWindow) -> Bool {
-        let titles: Set<String> = ["AirCursor", "Welcome to AirCursor"]
+        let titles: Set<String> = ["AirCursor", "Welcome to AirCursor", "AirCursor Controls"]
         return window.isVisible && titles.contains(window.title)
     }
 
