@@ -102,7 +102,7 @@ AirCursor tells you when a new version is out and shows what's new. Click **Inst
 
 **The pointer doesn't move.** AirPods only send head-tracking data to the device they're *playing audio for*. If your iPhone has them, or your Mac's sound output is set to its speakers, no motion arrives. Put the AirPods in, then choose them under **Control Center › Sound**. AirCursor switches the Mac's output to your AirPods automatically when it can, and warns you when it can't.
 
-**After an update, the pointer doesn't move even though Accessibility is on.** macOS ties the permission to the exact build. Open **System Settings › Privacy & Security › Accessibility** and switch AirCursor off and on again. The guided tour reopens on its own and walks you through it.
+**After updating from 1.0.6 or earlier, the pointer doesn't move even though Accessibility is on.** Those versions were signed per build, and macOS keeps the old build's permission. Switching it off and on doesn't fix that. Open **System Settings › Privacy & Security › Accessibility**, select AirCursor, remove it with the **−** button, then click **Open Settings** in AirCursor's guided tour and switch it on again. Releases from 1.0.7 on share one signing identity, so permissions carry over to later updates.
 
 **Something else is off.** Open **Settings › Shortcuts & General › Diagnostics**. It checks every link in the chain (permissions, Bluetooth, audio route, motion samples) and marks the first one that's failing.
 

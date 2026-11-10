@@ -7,7 +7,9 @@
 #
 # Signing matters: macOS ties the Accessibility permission to the app's signature.
 # With ad-hoc signing ("-"), every rebuild looks like a new app and you must
-# re-grant Accessibility. An Apple Development or Developer ID identity avoids that.
+# re-grant Accessibility. Any certificate avoids that: Apple Development or
+# Developer ID locally, and in CI the self-signed "AirCursor Release Signing"
+# certificate (RELEASE_CERT_P12 secret), which gives every release one identity.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -57,7 +59,13 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
   codesign --force --deep --sign - --entitlements Resources/AirCursor.entitlements "$APP"
   echo "  (ad-hoc: you'll need to re-grant Accessibility after each rebuild)"
 else
-  codesign --force --options runtime --timestamp \
+  # Apple-issued certificates get a secure timestamp. The self-signed release
+  # certificate ("AirCursor Release Signing") doesn't need one.
+  case "$SIGN_IDENTITY" in
+    "Developer ID"*|"Apple Development"*) timestamp=(--timestamp) ;;
+    *) timestamp=(--timestamp=none) ;;
+  esac
+  codesign --force --options runtime "${timestamp[@]}" \
     --entitlements Resources/AirCursor.entitlements --sign "$SIGN_IDENTITY" "$APP"
 fi
 codesign --verify --strict --verbose=1 "$APP"

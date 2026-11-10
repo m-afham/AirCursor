@@ -33,6 +33,18 @@ enum UpdateInstaller {
 
     static var appURL: URL { Bundle.main.bundleURL }
 
+    /// Ad-hoc signed copies (1.0.6 and earlier, and unsigned local builds) have a new identity
+    /// every build, so macOS drops their permissions on update. Certificate-signed releases don't.
+    static let isAdHocSigned: Bool = {
+        var code: SecStaticCode?
+        var info: CFDictionary?
+        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &code) == errSecSuccess, let code,
+              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let dict = info as? [String: Any] else { return true }
+        let flags = (dict[kSecCodeInfoFlags as String] as? NSNumber)?.uint32Value ?? 0
+        return flags & SecCodeSignatureFlags.adhoc.rawValue != 0 || dict[kSecCodeInfoCertificates as String] == nil
+    }()
+
     /// In-place install needs a writable app location. A copy run straight from Downloads
     /// (App Translocation) or from a read-only volume falls back to manual download.
     static var canReplaceSelf: Bool {

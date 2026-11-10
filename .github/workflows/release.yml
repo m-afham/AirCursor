@@ -16,7 +16,10 @@ name: Release
 #   NOTARY_APPLE_ID       Apple ID email
 #   NOTARY_TEAM_ID        10-character Team ID
 #   NOTARY_PASSWORD       app-specific password for notarytool
-# Without them, releases are ad-hoc signed (users approve once in System Settings).
+# Without them, releases are signed with the self-signed "AirCursor Release Signing"
+# certificate (RELEASE_CERT_P12 base64 + RELEASE_CERT_PASSWORD), which keeps the app's
+# identity stable across updates. Without that either, they're ad-hoc signed.
+# UPDATE_SIGNING_KEY signs the archive for the in-app "Install & Relaunch".
 
 on:
   push:
@@ -168,6 +171,32 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/')"
           echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      # Without a Developer ID, sign with the self-signed "AirCursor Release Signing"
+      # certificate. It isn't trusted by Gatekeeper (first installs still need "Open Anyway"),
+      # but every release then has the same identity, so macOS keeps Accessibility, Motion and
+      # Bluetooth across updates. Ad-hoc signing (no secrets) gives each build a new identity.
+      - name: Import release certificate
+        if: env.HAS_CERT != 'true'
+        env:
+          RELEASE_CERT_P12: ${{ secrets.RELEASE_CERT_P12 }}
+          RELEASE_CERT_PASSWORD: ${{ secrets.RELEASE_CERT_PASSWORD }}
+        run: |
+          if [ -z "$RELEASE_CERT_P12" ]; then
+            echo "::warning::RELEASE_CERT_P12 is not set; this release is ad-hoc signed and users must re-grant permissions."
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/release.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$RELEASE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/release.p12" -k "$KEYCHAIN" -P "$RELEASE_CERT_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          rm "$RUNNER_TEMP/release.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "SIGN_IDENTITY=AirCursor Release Signing" >> "$GITHUB_ENV"
 
       - name: Build universal app
         run: |

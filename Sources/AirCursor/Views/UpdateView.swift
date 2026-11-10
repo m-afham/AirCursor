@@ -48,7 +48,9 @@ struct UpdateView: View {
                 }
 
                 if updates.canInstallAutomatically {
-                    Text("AirCursor installs the update and restarts. macOS then asks you to switch AirCursor off and on once in Accessibility, and the guided tour shows you where.")
+                    Text(UpdateInstaller.isAdHocSigned
+                         ? "AirCursor installs the update and restarts. This one time, macOS needs you to allow AirCursor again: in Accessibility, remove AirCursor with the − button, then switch it back on. The guided tour shows you where. Later updates keep your permissions."
+                         : "AirCursor installs the update and restarts. Your permissions carry over.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

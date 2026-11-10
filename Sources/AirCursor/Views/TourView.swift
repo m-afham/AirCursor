@@ -378,7 +378,7 @@ private struct PermissionsStep: View {
                 row(
                     symbol: "cursorarrow.click.2",
                     title: "Accessibility",
-                    detail: "Lets AirCursor move the pointer and click for you. Find AirCursor in the list and switch it on. Already on? Switch it off and on again — macOS needs that after an update.",
+                    detail: "Lets AirCursor move the pointer and click for you. Find AirCursor in the list and switch it on. Already on but this still says no? Select AirCursor, remove it with the − button, then click here again and switch it on.",
                     granted: controller.accessibilityTrusted,
                     action: controller.requestAccessibility
                 )
