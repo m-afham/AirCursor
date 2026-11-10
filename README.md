@@ -30,7 +30,7 @@
 
 ## What it does
 
-AirCursor reads the motion sensors already built into your AirPods and turns head movement into a smooth, precise pointer. It runs as a native menu bar app. There's no extra hardware, no camera, and no network.
+AirCursor reads the motion sensors already built into your AirPods and turns head movement into a smooth, precise pointer. It runs as a native menu bar app. There's no extra hardware, no camera, and no account.
 
 | You do | AirCursor does *(defaults, all remappable)* |
 |---|---|
@@ -92,7 +92,11 @@ make install     # builds a universal app, copies it to /Applications, launches 
 | Motion | To read head movement from your AirPods |
 | Bluetooth | To list, pair and connect your headphones |
 
-Motion data is processed in memory on your Mac and never stored or sent anywhere. AirCursor makes no network requests and has no analytics.
+Motion data is processed in memory on your Mac and never stored or sent anywhere. AirCursor has no analytics. Its only network requests are a once-a-day check of this repository's latest release on GitHub, so it can tell you when an update is out, and downloading the update when you click **Install & Relaunch**. They carry nothing about you, your Mac or how you use the app, and you can turn it off in **Settings › Shortcuts & General › Updates**.
+
+## Updating
+
+AirCursor tells you when a new version is out and shows what's new. Click **Install & Relaunch** and it downloads the update, checks that it's a genuine signed AirCursor release, replaces itself and restarts. macOS then asks you to switch AirCursor off and on once in **System Settings › Privacy & Security › Accessibility**, and the guided tour opens right at that step. (Versions before 1.0.5 can't check for updates, so download the latest once from the link above.)
 
 ## Troubleshooting
 

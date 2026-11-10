@@ -57,6 +57,7 @@ final class AppController: ObservableObject {
     @Published private(set) var needsAudioHandoff = false
 
     let pairing = PairingService()
+    let updates = UpdateController()
 
     // MARK: Services
 
@@ -137,6 +138,24 @@ final class AppController: ObservableObject {
         }
 
         registerHotKeys()
+
+        updates.settings = { [unowned self] in self.settings }
+        updates.updateSettings = { [unowned self] change in change(&self.settings) }
+        updates.announce = { [weak self] in
+            // Never interrupt setup; the menu shows the update banner meanwhile.
+            guard let self, !self.needsSetup, let open = self.windowOpener else { return false }
+            open(WindowID.update)
+            NSApp.activate()
+            return true
+        }
+        updates.start()
+        if let version = UserDefaults.standard.string(forKey: UpdateInstaller.justUpdatedKey) {
+            UserDefaults.standard.removeObject(forKey: UpdateInstaller.justUpdatedKey)
+            Diagnostics.log.notice("Updated to \(version, privacy: .public)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.toast("Updated to AirCursor \(version)", symbol: "checkmark.circle.fill")
+            }
+        }
 
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -430,6 +449,7 @@ final class AppController: ObservableObject {
         let now = Self.now
         housekeepingTicks += 1
         if housekeepingTicks % 3 == 1 { refreshDevices() }
+        if housekeepingTicks % 5 == 0 { updates.announceIfPending() }
         if motionStreaming, now - lastSampleHostTime > 1.5 {
             motionStreaming = false
             smoother.reset()
@@ -545,7 +565,7 @@ final class AppController: ObservableObject {
     /// Dock and ⌘-Tab so the window can't get lost behind other apps.
     func windowVisibilityChanged() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            let titles: Set<String> = ["AirCursor", "Welcome to AirCursor"]
+            let titles: Set<String> = ["AirCursor", "Welcome to AirCursor", UpdateView.windowTitle]
             let anyOpen = NSApp.windows.contains { $0.isVisible && titles.contains($0.title) }
             let policy: NSApplication.ActivationPolicy = anyOpen ? .regular : .accessory
             if NSApp.activationPolicy() != policy {

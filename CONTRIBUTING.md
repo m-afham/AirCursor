@@ -28,7 +28,7 @@ macOS ties Accessibility permission to the app's code signature. `scripts/build-
 ## Guidelines
 
 - Put logic in `AirCursorCore` wherever possible, with tests. Gesture changes should come with a test that feeds synthetic motion (see `GestureTests`).
-- Keep the app private by design: no network calls, no analytics.
+- Keep the app private by design: no analytics, and no network calls beyond the anonymous daily update check in `Services/UpdateChecker.swift`.
 - Run `make test` before opening a PR. CI runs the same tests.
 - To refresh the tour screenshots in `docs/`, run `open build/AirCursor.app --env AIRCURSOR_SNAPSHOT_DIR=/tmp/shots`.
 

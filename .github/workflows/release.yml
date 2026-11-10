@@ -187,12 +187,26 @@ jobs:
           rm "build/AirCursor-$VERSION.zip"
           ditto -c -k --keepParent build/AirCursor.app "build/AirCursor-$VERSION.zip"
 
+      # Signs the final archive so the app's "Install & Relaunch" accepts it. Without the
+      # secret the release still publishes, and the app falls back to a manual download.
+      - name: Sign update
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$UPDATE_SIGNING_KEY" ]; then
+            echo "::warning::UPDATE_SIGNING_KEY is not set; this release won't install automatically."
+            exit 0
+          fi
+          swift scripts/update-signing.swift sign "build/AirCursor-$VERSION.zip" > "build/AirCursor-$VERSION.zip.sig"
+
       - name: Publish release
         env:
           SHA: ${{ needs.plan.outputs.sha }}
         run: |
           cp "build/AirCursor-$VERSION.zip" build/AirCursor.zip
+          assets=(build/AirCursor.zip "build/AirCursor-$VERSION.zip")
+          if [ -f "build/AirCursor-$VERSION.zip.sig" ]; then assets+=("build/AirCursor-$VERSION.zip.sig"); fi
           # Creates the tag on the released commit if it doesn't exist yet.
-          gh release create "$TAG" build/AirCursor.zip "build/AirCursor-$VERSION.zip" \
+          gh release create "$TAG" "${assets[@]}" \
             --repo "${{ github.repository }}" --target "$SHA" \
             --title "AirCursor $VERSION" --generate-notes

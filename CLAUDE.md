@@ -2,7 +2,8 @@
 
 AirCursor is a free, open-source macOS menu bar app that turns AirPods head tracking into a
 mouse pointer. Turn your head to point. Rest on a button to click (smart hover click), or nod,
-or press the stem. It is hands-free, private (no network, no analytics), and simple.
+or press the stem. It is hands-free, private (no analytics; its only network request is an
+anonymous daily update check), and simple.
 
 ## Architecture
 
@@ -25,9 +26,19 @@ or press the stem. It is hands-free, private (no network, no analytics), and sim
    try it, done). It opens automatically whenever setup is incomplete, resumes where it left
    off, and Continue never blocks. Tracking is on by default and starts as soon as
    Accessibility is granted. Head gestures can't pause tracking during setup.
-3. **Private by design.** No network requests, analytics, telemetry, crash reporters, remote
-   config, update pings, or third-party SDKs. Motion data stays in memory. Nothing about the
-   user's screen, apps or input is logged beyond the minimal diagnostics already present.
+3. **Private by design.** No analytics, telemetry, crash reporters, remote config, or
+   third-party SDKs. The only network requests are the updater's (`Services/Update*.swift`):
+   one anonymous GET of this repository's public GitHub "latest release", at most daily and
+   switchable off, and, only after the user clicks "Install & Relaunch", downloading that
+   release's archive and `.sig`. They send no identifiers, usage or device data and store no
+   cookies. Any other network request, or extending these, is a contract violation.
+   Motion data stays in memory. Nothing about the user's screen, apps or input is logged
+   beyond the minimal diagnostics already present.
+   **Updates are verified before install:** the archive's Ed25519 signature must match
+   `UpdateInstaller.publicKey` (`UpdateSignature` in core), then the unpacked app must have
+   our bundle ID, the advertised version and a valid code signature. Never install without
+   the user's click, skip or weaken a check, or change the public key without the owner.
+   The only processes AirCursor launches are `ditto` (unzip) and the relaunch helper there.
 4. **Minimal permissions.** Only Accessibility, Motion and Bluetooth. No new entitlements,
    usage descriptions, sandbox changes, or privileged helpers.
 5. **Safe input synthesis.** Never leave a mouse button held. A drag is released on pause,
@@ -67,7 +78,8 @@ Decide one verdict:
 - `request_changes`: bugs, regressions, contract or privacy violations, missing tests for core
   logic, or anything suspicious.
 - `needs_owner`: otherwise reasonable, but it touches `.github/`, `scripts/`, `Makefile`,
-  `Package.swift`, `Resources/Info.plist`, entitlements or permissions, or it changes product
+  `Package.swift`, `Resources/Info.plist`, entitlements or permissions, the updater
+  (`Services/Update*.swift`, `AirCursorCore/Updates.swift`), or it changes product
   direction (defaults, tour flow, what clicks). A human must decide.
 
 Post exactly one review comment on the PR with `gh pr comment`, in this shape:

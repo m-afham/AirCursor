@@ -114,6 +114,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var showHUD: Bool = true
     public var showClickPulse: Bool = true
     public var hasCompletedOnboarding: Bool = false
+    /// Look up the latest GitHub release once a day (one anonymous request).
+    public var checkForUpdates: Bool = true
+    /// A release the user chose to skip; it isn't announced again automatically.
+    public var skippedUpdateVersion: String?
 
     public init() {}
 
@@ -131,6 +135,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showHUD = c.value(.showHUD, default: d.showHUD)
         showClickPulse = c.value(.showClickPulse, default: d.showClickPulse)
         hasCompletedOnboarding = c.value(.hasCompletedOnboarding, default: d.hasCompletedOnboarding)
+        checkForUpdates = c.value(.checkForUpdates, default: d.checkForUpdates)
+        skippedUpdateVersion = c.value(.skippedUpdateVersion, default: nil)
     }
 }
 

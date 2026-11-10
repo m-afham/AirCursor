@@ -3,6 +3,7 @@ import AirCursorCore
 
 struct MenuContentView: View {
     @EnvironmentObject private var controller: AppController
+    @EnvironmentObject private var updates: UpdateController
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -19,6 +20,21 @@ struct MenuContentView: View {
                 warning("Your AirPods are connected but playing for another device. Choose them under Control Center › Sound so they send head tracking to this Mac.", button: "Sound…") {
                     AppController.openSoundSettings()
                 }
+            }
+
+            if let update = updates.available {
+                HStack {
+                    Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.accentColor)
+                    Text("AirCursor \(update.version.description) is available").font(.callout)
+                    Spacer()
+                    Button("Update…") {
+                        openWindow(id: WindowID.update)
+                        NSApp.activate()
+                    }
+                    .controlSize(.small)
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.12)))
             }
 
             deviceRow

@@ -412,6 +412,8 @@ struct GestureSettingsView: View {
 
 struct GeneralView: View {
     @EnvironmentObject private var controller: AppController
+    @EnvironmentObject private var updates: UpdateController
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Form {
@@ -435,6 +437,27 @@ struct GeneralView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show on‑screen status messages", isOn: $controller.settings.showHUD)
                 Toggle("Show a ripple where clicks land", isOn: $controller.settings.showClickPulse)
+            }
+
+            Section("Updates") {
+                Toggle("Check for updates automatically", isOn: $controller.settings.checkForUpdates)
+                Text("Once a day AirCursor asks GitHub for the latest release. Nothing about you, your Mac or how you use AirCursor is sent.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    if let update = updates.available {
+                        Label("AirCursor \(update.version.description) is available", systemImage: "arrow.down.circle.fill")
+                        Spacer()
+                        Button("View Update…") {
+                            openWindow(id: WindowID.update)
+                            NSApp.activate()
+                        }
+                    } else {
+                        Text(updateStatus).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Check Now") { updates.check(manual: true) }
+                            .disabled(updates.status == .checking)
+                    }
+                }
             }
 
             Section("Tips") {
@@ -477,6 +500,17 @@ struct GeneralView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var updateStatus: String {
+        let version = "AirCursor \(updates.currentVersion)"
+        switch updates.status {
+        case .idle: return version
+        case .checking: return "Checking…"
+        case .upToDate(let date):
+            return "\(version) is up to date · checked \(date.formatted(date: .omitted, time: .shortened))"
+        case .failed: return "Couldn’t reach GitHub. Try again later."
+        }
     }
 
     private func tip(_ text: String) -> some View {

@@ -11,6 +11,7 @@ struct AirCursorApp: App {
             MenuContentView()
                 .environmentObject(controller)
                 .environmentObject(controller.pairing)
+                .environmentObject(controller.updates)
         } label: {
             MenuBarLabel(controller: controller)
         }
@@ -20,6 +21,7 @@ struct AirCursorApp: App {
             MainWindowView()
                 .environmentObject(controller)
                 .environmentObject(controller.pairing)
+                .environmentObject(controller.updates)
                 .frame(minWidth: 760, minHeight: 540)
         }
         .windowResizability(.contentMinSize)
@@ -36,6 +38,15 @@ struct AirCursorApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
         .defaultLaunchBehavior(AppController.shared.needsSetup || DebugSnapshot.directory != nil ? .presented : .suppressed)
+
+        Window(UpdateView.windowTitle, id: WindowID.update) {
+            UpdateView()
+                .environmentObject(controller)
+                .environmentObject(controller.updates)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .defaultLaunchBehavior(.suppressed)
     }
 }
 
@@ -56,6 +67,7 @@ private struct MenuBarLabel: View {
 enum WindowID {
     static let main = "main"
     static let tour = "tour"
+    static let update = "update"
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {

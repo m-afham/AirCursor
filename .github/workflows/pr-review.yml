@@ -171,7 +171,7 @@ jobs:
         name: Leave sensitive changes to the owner
         run: |
           files=$(gh pr view "$PR" --repo "$REPO" --json files --jq '.files[].path')
-          sensitive=$(printf '%s\n' "$files" | grep -E '^(\.github/|scripts/|Makefile$|Package\.(swift|resolved)$|Resources/Info\.plist$|.*\.entitlements$|CLAUDE\.md$)' || true)
+          sensitive=$(printf '%s\n' "$files" | grep -E '^(\.github/|scripts/|Makefile$|Package\.(swift|resolved)$|Resources/Info\.plist$|.*\.entitlements$|CLAUDE\.md$|Sources/AirCursor/Services/Update[^/]*\.swift$|Sources/AirCursorCore/Updates\.swift$)' || true)
           if [ -n "$sensitive" ]; then
             gh pr edit "$PR" --repo "$REPO" --add-label needs-owner-review
             {
