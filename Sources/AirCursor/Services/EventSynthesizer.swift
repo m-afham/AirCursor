@@ -3,6 +3,7 @@ import CoreGraphics
 
 /// Posts synthetic mouse, scroll and keyboard events. Requires Accessibility permission.
 final class EventSynthesizer {
+    static let scrollMarker: Int64 = 0x414952435552
     private let source = CGEventSource(stateID: .hidSystemState)
     private(set) var isLeftButtonDown = false
 
@@ -52,8 +53,9 @@ final class EventSynthesizer {
 
     /// Pixel-precise scroll. Positive `vertical` scrolls up, positive `horizontal` scrolls left.
     func scroll(vertical: Int32, horizontal: Int32) {
-        CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2, wheel1: vertical, wheel2: horizontal, wheel3: 0)?
-            .post(tap: .cghidEventTap)
+        let event = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2, wheel1: vertical, wheel2: horizontal, wheel3: 0)
+        event?.setIntegerValueField(.eventSourceUserData, value: Self.scrollMarker)
+        event?.post(tap: .cghidEventTap)
     }
 
     func keyStroke(_ keyCode: CGKeyCode, flags: CGEventFlags) {

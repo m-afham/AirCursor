@@ -69,5 +69,10 @@ struct HotKey {
     static let recenter = HotKey(id: 3, keyCode: kVK_ANSI_C, display: "⌃⌥C", description: "Recenter cursor on screen")
     static let drag = HotKey(id: 4, keyCode: kVK_ANSI_D, display: "⌃⌥D", description: "Start / drop a drag")
 
-    static let all = [toggleTracking, scrollMode, recenter, drag]
+    static let readingMode = HotKey(id: 5, keyCode: kVK_ANSI_R, display: "⌃⌥R", description: "Enter / exit Reading Mode")
+    static let readingPlayback = HotKey(id: 6, keyCode: kVK_ANSI_P, display: "⌃⌥P", description: "Start / pause reading over a document")
+    static let readingForward = HotKey(id: 7, keyCode: kVK_ANSI_N, display: "⌃⌥N", description: "Reading: step forward")
+    static let readingBack = HotKey(id: 8, keyCode: kVK_ANSI_B, display: "⌃⌥B", description: "Reading: back a little")
+
+    static let all = [toggleTracking, scrollMode, recenter, drag, readingMode, readingPlayback, readingForward, readingBack]
 }

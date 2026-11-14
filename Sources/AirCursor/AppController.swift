@@ -7,9 +7,15 @@ import SwiftUI
 import AirCursorCore
 
 enum TrackingMode: String {
-    case pointer, scroll
+    case pointer, scroll, reading
 
-    var title: String { self == .pointer ? "Pointer" : "Scroll" }
+    var title: String {
+        switch self {
+        case .pointer: "Pointer"
+        case .scroll: "Scroll"
+        case .reading: "Reading"
+        }
+    }
 }
 
 /// Live sensor readout for the UI (published at ~10 Hz, not per frame).
@@ -37,6 +43,11 @@ final class AppController: ObservableObject {
 
     @Published private(set) var trackingEnabled = false
     @Published private(set) var mode: TrackingMode = .pointer
+    @Published private(set) var readingState: ReadingSession.State = .inactive
+    private var readingSession = ReadingSession()
+    private var readingTargetPID: pid_t?
+    private var readingAnchor: CGPoint?
+    private var readingInputMonitor: Any?
     @Published private(set) var isDragging = false
     @Published private(set) var motionStreaming = false
     @Published private(set) var accessibilityTrusted = EventSynthesizer.isTrusted
@@ -138,6 +149,17 @@ final class AppController: ObservableObject {
         }
 
         registerHotKeys()
+        readingInputMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+        ) { [weak self] event in
+            guard event.cgEvent?.getIntegerValueField(.eventSourceUserData) != EventSynthesizer.scrollMarker else { return }
+            // Carbon handles these commands. Do not race their start/step callbacks.
+            let commandKeys = [HotKey.readingMode, HotKey.readingPlayback, HotKey.readingForward, HotKey.readingBack]
+            if event.type == .keyDown,
+               event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.control, .option],
+               commandKeys.contains(where: { $0.keyCode == Int(event.keyCode) }) { return }
+            MainActor.assumeIsolated { self?.pauseReading() }
+        }
 
         updates.settings = { [unowned self] in self.settings }
         updates.updateSettings = { [unowned self] change in change(&self.settings) }
@@ -165,7 +187,15 @@ final class AppController: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.releaseButtons() }
+            MainActor.assumeIsolated {
+                self?.pauseReading()
+                self?.releaseButtons()
+            }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pauseReading() }
         }
 
         housekeepingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -209,6 +239,9 @@ final class AppController: ObservableObject {
     }
 
     func shutdown() {
+        pauseReading()
+        if let monitor = readingInputMonitor { NSEvent.removeMonitor(monitor) }
+        readingInputMonitor = nil
         releaseButtons()
         stem.stop()
         keepAlive.stop()
@@ -241,6 +274,7 @@ final class AppController: ObservableObject {
         cursor = nil
         lastFrame = nil
         if !on {
+            pauseReading()
             releaseButtons()
             dwell.reset()
             cursorOverlay.hide()
@@ -254,14 +288,78 @@ final class AppController: ObservableObject {
 
     func setMode(_ newMode: TrackingMode) {
         guard newMode != mode else { return }
+        if newMode == .reading, needsSetup { return }
         if isDragging { endDrag(at: cursor ?? synth.currentLocation()) }
         mode = newMode
+        readingSession.exit()
+        if newMode == .reading { readingSession.enter() }
+        readingState = readingSession.state
+        readingTargetPID = nil
+        readingAnchor = nil
         scrollRemainder = .zero
         smoother.reset()
         dwell.reset()
         cursorOverlay.hide()
-        toast(newMode == .scroll ? "Scroll mode — move your head to scroll" : "Pointer mode",
+        toast(newMode == .reading ? "Reading ready — point at your document, then press ⌃⌥P" : newMode == .scroll ? "Scroll mode — move your head to scroll" : "Pointer mode",
               symbol: newMode == .scroll ? "arrow.up.and.down.circle.fill" : "cursorarrow")
+    }
+
+    func pauseReading() {
+        readingSession.pause()
+        if readingState != readingSession.state { readingState = readingSession.state }
+    }
+
+    private var readingPermitted: Bool {
+        guard mode == .reading, trackingEnabled, EventSynthesizer.isTrusted,
+              motionAuthorization == .authorized, motionStreaming,
+              Self.now - lastSampleHostTime < PointerSmoother.staleAfter,
+              let target = readingTargetPID,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == target,
+              target != ProcessInfo.processInfo.processIdentifier,
+              let anchor = readingAnchor else { return false }
+        let point = synth.currentLocation()
+        return hypot(point.x - anchor.x, point.y - anchor.y) <= 3
+    }
+
+    /// Start/step commands are invoked over the document, not over the menu.
+    private func prepareReadingTarget() -> Bool {
+        guard mode == .reading else { return false }
+        readingTargetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        readingAnchor = synth.currentLocation()
+        // Reject the menu bar, our own controls and background-app surfaces.
+        // This is a point-in-time app check, not a lock to a nested scroll pane.
+        guard let anchor = readingAnchor, let target = readingTargetPID else { return false }
+        var element: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),
+                                              Float(anchor.x), Float(anchor.y), &element) == .success,
+              let element else { return false }
+        var owner: pid_t = 0
+        guard AXUIElementGetPid(element, &owner) == .success, owner == target else { return false }
+        return readingPermitted
+    }
+
+    func toggleReadingPlayback() {
+        guard mode == .reading else { return }
+        if readingState == .running { pauseReading(); return }
+        guard prepareReadingTarget() else {
+            toast("Reading unavailable — focus your document and connect AirPods", symbol: "pause.circle")
+            return
+        }
+        readingSession.start()
+        readingState = readingSession.state
+        lastFrame = Self.now
+    }
+
+    func readingStep(backward: Bool) {
+        let permitted = prepareReadingTarget()
+        let amount = readingSession.step(backward: backward, permitted: permitted, settings: settings.reading)
+        readingState = readingSession.state
+        if amount != 0 { synth.scroll(vertical: -amount, horizontal: 0) }
+    }
+
+    func adjustReadingSpeed(_ change: Double) {
+        settings.reading.pointsPerSecond = min(max(settings.reading.boundedSpeed + change, 5), 150)
+        toast("Reading speed: \(Int(settings.reading.boundedSpeed)) points/s", symbol: "book")
     }
 
     /// Asks for motion permission (system prompt) without starting cursor control.
@@ -585,6 +683,7 @@ final class AppController: ObservableObject {
             toast("AirPods head tracking connected", symbol: "airpodspro")
         } else {
             motionStreaming = false
+            pauseReading()
             smoother.reset()
             releaseButtons()
             if trackingEnabled { toast("AirPods disconnected", symbol: "exclamationmark.triangle.fill") }
@@ -592,6 +691,7 @@ final class AppController: ObservableObject {
     }
 
     private func motionFailed(_ error: Error) {
+        pauseReading()
         let ns = error as NSError
         lastMotionError = "\(ns.localizedDescription) (\(ns.domain) \(ns.code))"
         refreshPermissions()
@@ -617,6 +717,7 @@ final class AppController: ObservableObject {
         }
 
         var enabled = settings.actions.enabledHeadGestures
+        if mode == .reading { enabled = [.shake, .tiltLeft, .tiltRight] }
         if nodCalibration != nil { enabled.insert(.nod) }
         if let event = gestures.process(sample, enabled: enabled) {
             Diagnostics.log.notice("Gesture \(event.gesture.rawValue, privacy: .public) (\(String(format: "%.1f", event.magnitude), privacy: .public)°)")
@@ -653,6 +754,14 @@ final class AppController: ObservableObject {
     /// Runs at 120 Hz while tracking: integrates smoothed velocity into cursor movement.
     private func frame() {
         let now = Self.now
+        if mode == .reading {
+            let elapsed = now - (lastFrame ?? now)
+            lastFrame = now
+            let amount = readingSession.tick(dt: elapsed, permitted: readingPermitted, settings: settings.reading)
+            if readingState != readingSession.state { readingState = readingSession.state }
+            if amount != 0 { synth.scroll(vertical: -amount, horizontal: 0) }
+            return
+        }
         let dt = min(max(now - (lastFrame ?? now), 0), 0.05)
         lastFrame = now
 
@@ -661,6 +770,8 @@ final class AppController: ObservableObject {
         guard var position = cursor else { return }
 
         switch mode {
+        case .reading:
+            return
         case .pointer:
             if delta.length > 0.01 {
                 let next = screens.clamp(CGPoint(x: position.x + delta.x, y: position.y + delta.y), from: position)
@@ -748,6 +859,20 @@ final class AppController: ObservableObject {
     // MARK: Triggers → actions
 
     private func handle(trigger: Trigger, gestureStart: TimeInterval?) {
+        if mode == .reading {
+            // Reading overrides never mutate the user's normal gesture bindings.
+            switch trigger {
+            case .shake:
+                if readingState == .running { pauseReading() } else { setMode(.pointer) }
+            case .stemSingle: toggleReadingPlayback()
+            case .stemDouble: readingStep(backward: true)
+            case .stemTriple: setMode(.pointer)
+            case .tiltLeft: adjustReadingSpeed(-5)
+            case .tiltRight: adjustReadingSpeed(5)
+            case .nod, .dwell: break
+            }
+            return
+        }
         let action = settings.actions[trigger]
         guard action != .none else { return }
         guard trackingEnabled || action == .toggleTracking else { return }
@@ -775,6 +900,10 @@ final class AppController: ObservableObject {
     }
 
     private func perform(_ action: PointerAction, at point: CGPoint) {
+        if mode == .reading {
+            // Also protect direct shortcuts and settings buttons from clicks/recenter.
+            guard action == .toggleTracking || action == .toggleScrollMode else { return }
+        }
         switch action {
         case .none:
             return
@@ -849,6 +978,19 @@ final class AppController: ObservableObject {
 
     private func registerHotKeys() {
         let mods = HotKey.modifiers
+        hotKeys.register(id: HotKey.readingMode.id, keyCode: HotKey.readingMode.keyCode, modifiers: mods) { [weak self] in
+            guard let self, self.trackingEnabled else { return }
+            self.setMode(self.mode == .reading ? .pointer : .reading)
+        }
+        hotKeys.register(id: HotKey.readingPlayback.id, keyCode: HotKey.readingPlayback.keyCode, modifiers: mods) { [weak self] in
+            self?.toggleReadingPlayback()
+        }
+        hotKeys.register(id: HotKey.readingForward.id, keyCode: HotKey.readingForward.keyCode, modifiers: mods) { [weak self] in
+            self?.readingStep(backward: false)
+        }
+        hotKeys.register(id: HotKey.readingBack.id, keyCode: HotKey.readingBack.keyCode, modifiers: mods) { [weak self] in
+            self?.readingStep(backward: true)
+        }
         hotKeys.register(id: HotKey.toggleTracking.id, keyCode: HotKey.toggleTracking.keyCode, modifiers: mods) { [weak self] in
             self?.toggleTracking()
         }
@@ -868,6 +1010,7 @@ final class AppController: ObservableObject {
     // MARK: Menu bar
 
     var menuBarSymbol: String {
+        if mode == .reading { return readingState == .running ? "book.fill" : "pause.circle" }
         if !trackingEnabled { return "cursorarrow" }
         if !motionStreaming { return "airpodspro" }
         return mode == .scroll ? "arrow.up.and.down.circle" : "cursorarrow.motionlines"
@@ -880,6 +1023,9 @@ final class AppController: ObservableObject {
         if needsAudioHandoff { return "Choose AirPods as Mac sound output" }
         if !motionStreaming { return "Waiting for AirPods…" }
         if isDragging { return "Dragging" }
+        if mode == .reading {
+            return readingState == .running ? "Reading · \(Int(settings.reading.boundedSpeed)) points/s" : readingState == .ready ? "Reading · Ready" : "Reading · Paused"
+        }
         return mode == .scroll ? "Scrolling" : "Tracking your head"
     }
 }

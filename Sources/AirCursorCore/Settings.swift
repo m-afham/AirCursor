@@ -101,6 +101,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var version: Int = AppSettings.currentVersion
 
     public var pointer = PointerSettings()
+    public var reading = ReadingSettings()
     public var gestures = GestureSettings()
     public var dwell = DwellSettings()
     public var actions = ActionMap()
@@ -126,6 +127,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         let d = AppSettings()
         version = c.value(.version, default: 1)
         pointer = c.value(.pointer, default: d.pointer)
+        reading = c.value(.reading, default: d.reading)
         gestures = c.value(.gestures, default: d.gestures)
         dwell = c.value(.dwell, default: d.dwell)
         actions = c.value(.actions, default: d.actions)
