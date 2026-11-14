@@ -2,8 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, Rohit/reading-mode]
   pull_request:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -12,6 +15,7 @@ concurrency:
 jobs:
   test:
     runs-on: macos-15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -19,7 +23,7 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Test core logic
+      - name: Test core and app
         run: swift test
 
       - name: Build app bundle (arm64)
