@@ -329,6 +329,19 @@ struct PointerSettingsView: View {
                 Text("In scroll mode, look down/up to scroll and turn left/right to scroll sideways. Toggle it with a triple stem press or \(HotKey.scrollMode.display).")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Reading mode") {
+                Button(controller.mode == .reading ? "Exit Reading Mode" : "Enter Reading Mode") {
+                    controller.setMode(controller.mode == .reading ? .pointer : .reading)
+                }
+                .disabled(!controller.trackingEnabled || controller.needsSetup)
+                Text("⌃⌥R enters or exits Reading Mode. Start over your document with ⌃⌥P.")
+                    .font(.caption).foregroundStyle(.secondary)
+                LabeledSlider(title: "Reading speed", value: $controller.settings.reading.pointsPerSecond, range: 5...150,
+                              format: { String(format: "%.0f points/s", $0) })
+                LabeledSlider(title: "Step distance", value: $controller.settings.reading.stepPoints, range: 40...800,
+                              format: { String(format: "%.0f points", $0) })
+                if controller.mode == .reading { ReadingControlsView() }
+            }
         }
         .formStyle(.grouped)
     }

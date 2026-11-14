@@ -54,7 +54,29 @@ On first launch AirCursor takes you through two permissions and connecting your 
   <img src="docs/screenshots/done.png" width="410" alt="Cheat sheet">
 </p>
 
+## Reading Mode (development preview)
+
+Reading Mode adds steady vertical scrolling and explicit forward/back steps.
+Enter with **⌃⌥R** or choose **Reading** in the menu. Close the menu, focus your
+document and place the pointer over it; press **⌃⌥P** to start or pause.
+**⌃⌥N** steps forward and **⌃⌥B** goes back; both leave scrolling paused.
+Adjust speed and step distance in Settings. These are scroll distances, not exact
+text lines or pages.
+
+While reading, single/double/triple stem presses start or pause/go back/exit.
+Tilt left/right to decrease/increase speed. Shake to pause; shake again while
+paused to exit. Nods, hover clicks and normal click/drag actions are ignored.
+Your normal gesture bindings return on exit. Stem controls must be enabled and
+may conflict with media playback; the shortcuts remain available.
+
+Manual input, pointer movement, switching apps and interrupted motion pause the
+session. Resume explicitly over your document. This preview checks the foreground
+app and pointer position; it does not lock to a particular window or nested pane.
+macOS compilation, input-monitor behavior and real-AirPods validation are pending;
+see [the implementation plan](docs/READING_MODE_PLAN.md) before release.
+
 ## Requirements
+
 
 - macOS 15 Sequoia or later (Apple silicon or Intel)
 - Headphones with head-tracking sensors: **AirPods Pro** (any generation), **AirPods Max**, **AirPods (3rd generation or later)**, or **Beats Fit Pro**

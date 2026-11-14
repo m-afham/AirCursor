@@ -52,11 +52,15 @@ struct MenuContentView: View {
             Picker("Mode", selection: Binding(get: { controller.mode }, set: { controller.setMode($0) })) {
                 Text("Pointer").tag(TrackingMode.pointer)
                 Text("Scroll").tag(TrackingMode.scroll)
+                Text("Reading").tag(TrackingMode.reading)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .disabled(!controller.trackingEnabled)
 
+            if controller.mode == .reading {
+                ReadingControlsView()
+            } else {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text("Speed")
@@ -68,6 +72,7 @@ struct MenuContentView: View {
             }
 
             Toggle("Hover click (rest the pointer to click)", isOn: $controller.settings.dwell.enabled)
+            }
 
             if let last = controller.lastTriggerDescription {
                 Text("Last: \(last)").font(.caption).foregroundStyle(.secondary).lineLimit(1)

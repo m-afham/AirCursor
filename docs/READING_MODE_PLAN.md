@@ -7,9 +7,32 @@ scroll, onboarding and gesture defaults remain unchanged. No new permissions,
 network calls, dependencies, text capture or input logging. No commits or pushes
 are performed by the implementation agent.
 
-Phase 1 is implemented but not compiled: deterministic session engine, lenient
-settings and XCTest coverage. This Windows workspace has no Swift toolchain.
-Reading Mode is not yet exposed in the app. Remaining phases are required for release.
+Phases 1–3 have an initial implementation, not yet compiled: session engine,
+settings, menu/settings controls, shortcuts, reading gesture overrides and
+interruption checks. This Windows workspace has no Swift toolchain. All macOS
+build, integration and hardware checks below remain release blockers.
+
+## Integration decisions and remaining limitations
+
+- Start and step use shortcuts/stem presses over the document; panel buttons only
+  pause, change speed or exit. Starting checks the Accessibility element owner at
+  the pointer against the foreground app to reject our controls/background apps.
+- A separate frame path ignores head velocity and suppresses normal clicks/recenter.
+- Pause latches on stale samples, long frames, physical clicks/wheel/typing, pointer
+  displacement, application activation, sleep and motion failures. Synthetic scroll
+  events carry a marker so they do not trigger the physical-scroll monitor.
+- ⌃⌥R enters/exits; ⌃⌥P starts/pauses; ⌃⌥N/⌃⌥B step forward/back.
+- Reading overrides: single stem starts/pauses, double goes back, triple exits;
+  left/right tilt changes speed; shake pauses or exits if already paused. Nod is
+  deliberately disabled pending false-activation testing. Overrides do not rewrite
+  saved normal bindings. These shortcuts/overrides are currently fixed, not configurable.
+- Foreground app and pointer anchor are checked, but this is not window/pane locking.
+  Programmatic same-app window changes and nested panes still need validation and
+  stronger target tracking before release. Unsupported Accessibility hit tests
+  reject playback rather than guessing a destination.
+- No floating panel, focus band, viewport-relative steps or end-of-document detection.
+- Global input-monitor delivery and Carbon shortcut ordering require real macOS
+  verification, including keyboard permission behavior and media-key conflicts.
 
 ## 1. Core foundation
 

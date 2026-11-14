@@ -2,6 +2,26 @@ import XCTest
 @testable import AirCursorCore
 
 final class ReadingTests: XCTestCase {
+    func testPauseDiscardsFractionalMovement() {
+        var session = ReadingSession()
+        session.enter()
+        session.start()
+        XCTAssertEqual(session.tick(dt: 0.02, permitted: true, settings: .init()), 0)
+        session.pause()
+        session.start()
+        XCTAssertEqual(session.tick(dt: 0.02, permitted: true, settings: .init()), 0)
+        XCTAssertEqual(session.tick(dt: 0.02, permitted: true, settings: .init()), 1)
+    }
+
+    func testReenterAlwaysRequiresStart() {
+        var session = ReadingSession()
+        session.enter()
+        session.start()
+        session.enter()
+        XCTAssertEqual(session.state, .ready)
+        XCTAssertEqual(session.tick(dt: 0.02, permitted: true, settings: .init()), 0)
+    }
+
     func testExplicitStartAndExit() {
         var session = ReadingSession()
         session.start()
